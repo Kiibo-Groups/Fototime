@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  PHOTOGRAPHER
+  ADMIN
+  CUSTOMER
+}
+
+enum Category {
+  SPORTS
+  RUNNING
+  CYCLING
+  WEDDING
+  GRADUATION
+  CORPORATE
+  OTHER
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String?
+  name         String
+  role         Role          @default(PHOTOGRAPHER)
+  username     String?       @unique
+  avatarUrl    String?
+  bio          String?
+  instagram    String?
+  website      String?
+  phone        String?
+  payoutMpAcc  String?       // Mercado Pago Collector ID
+  payoutStripe String?       // Stripe Connected Account ID
+  events       Event[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Event {
+  id                    String      @id @default(uuid())
+  slug                  String      @unique
+  title                 String
+  description           String?
+  category              Category    @default(SPORTS)
+  date                  DateTime
+  location              String
+  coverImage            String?
+  pricePerPhoto         Decimal     @db.Decimal(10, 2)
+  fullAlbumPrice        Decimal?    @db.Decimal(10, 2)
+  fullAlbumDiscountPct  Int         @default(30)
+  isPublished           Boolean     @default(true)
+  photographerId        String
+  photographer          User        @relation(fields: [photographerId], references: [id], onDelete: Cascade)
+  photos                Photo[]
+  orders                Order[]
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+}
+
+model Photo {
+  id           String       @id @default(uuid())
+  eventId      String
+  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  originalUrl  String       // Private S3/R2 URL for high-res download
+  previewUrl   String       // Watermarked webp URL
+  thumbnailUrl String?
+  dorsal       String?      // OCR identified bib number (e.g. "104")
+  capturedAt   DateTime?    // EXIF timestamp for time-based search
+  faceTokens   String[]     // Face feature embeddings
+  width        Int
+  height       Int
+  price        Decimal?     @db.Decimal(10, 2)
+  downloads    Int          @default(0)
+  orderItems   OrderItem[]
+  createdAt    DateTime     @default(now())
+}
+
+model Order {
+  id             String       @id @default(uuid())
+  eventId        String
+  event          Event        @relation(fields: [eventId], references: [id])
+  customerEmail  String
+  customerName   String
+  customerPhone  String?
+  totalAmount    Decimal      @db.Decimal(10, 2)
+  discountAmount Decimal      @default(0) @db.Decimal(10, 2)
+  gateway        String       // 'mercadopago' | 'stripe'
+  gatewayPaymentId String?
+  status         OrderStatus  @default(PENDING)
+  downloadToken  String       @unique @default(uuid())
+  items          OrderItem[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  photoId   String
+  photo     Photo    @relation(fields: [photoId], references: [id])
+  unitPrice Decimal  @db.Decimal(10, 2)
+}
